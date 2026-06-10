@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>QUINCUNX · Galton Board Simulation</title>
+<style>
+  :root{
+    --bg:#f4f1ec; --panel:#fbfaf7; --ink:#2b2b2b; --muted:#8a8a84;
+    --bull:#4a72c8; --bear:#9c5a3c; --line:#e2ddd4; --accent:#3a5fb0;
+    --mono:"SFMono-Regular",ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.4}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px}
+  .topbar{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:14px 18px;margin-bottom:14px}
+  .brand{font-weight:700;letter-spacing:.12em}
+  .brand small{display:block;font-weight:400;color:var(--muted);letter-spacing:.18em;font-size:10px;margin-top:3px}
+  .pill{border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:10px;letter-spacing:.12em;color:var(--accent)}
+  .grid{display:grid;grid-template-columns:260px 1fr;gap:14px}
+  .panel{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:16px}
+  h2{font-size:11px;letter-spacing:.16em;color:var(--muted);margin:0 0 14px;font-weight:600;text-transform:uppercase}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .stat:last-child{border-bottom:0}
+  .stat .k{color:var(--muted);font-size:10px;letter-spacing:.08em}
+  .stat .v{font-weight:700}
+  .v.bull{color:var(--bull)} .v.bear{color:var(--bear)}
+  canvas{display:block;width:100%;border-radius:8px;background:#fdfcfa}
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:14px}
+  .controls label{font-size:10px;color:var(--muted);letter-spacing:.08em;display:flex;flex-direction:column;gap:4px}
+  input[type=range]{width:160px;accent-color:var(--accent)}
+  button{font-family:var(--mono);font-size:11px;letter-spacing:.08em;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:8px 16px;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .biasval{font-weight:700;color:var(--ink);font-size:13px}
+  .note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  .disclaimer{margin-top:14px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:14px 18px;font-size:11px;color:var(--muted);line-height:1.6}
+  .disclaimer b{color:var(--bear)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">QUINCUNX · GALTON BOARD<small>LAW OF LARGE NUMBERS · MONTE CARLO SIMULATION</small></div>
+    <div class="pill" id="status">● IDLE</div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Live Convergence</h2>
+      <div class="stat"><span class="k">BALLS DROPPED</span><span class="v" id="dropped">0</span></div>
+      <div class="stat"><span class="k">LANDED RIGHT</span><span class="v bull" id="green">0.0%</span></div>
+      <div class="stat"><span class="k">PEG BIAS p</span><span class="v" id="pegp">0.54</span></div>
+      <div class="stat"><span class="k">GATES (ROWS)</span><span class="v" id="rows">8</span></div>
+      <div class="stat"><span class="k">EXPECTED RIGHT</span><span class="v" id="expected">—</span></div>
+      <div class="stat"><span class="k">MEAN BIN</span><span class="v" id="meanbin">—</span></div>
+      <div class="note">
+        Each ball passes 8 pegs. At every peg it goes right with probability <b>p</b>.
+        One ball is noise. Thousands of balls converge to a binomial bell curve —
+        that is the law of large numbers, nothing more.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Quincunx · 8 Gates</h2>
+      <canvas id="board" height="360"></canvas>
+      <div class="controls">
+        <label>PEG BIAS p = <span class="biasval" id="biaslabel">0.54</span>
+          <input type="range" id="bias" min="0.40" max="0.60" step="0.005" value="0.54" />
+        </label>
+        <label>SPEED
+          <input type="range" id="speed" min="1" max="40" step="1" value="12" />
+        </label>
+        <button id="run" class="primary">RUN</button>
+        <button id="reset">RESET</button>
+      </div>
+      <div class="charts">
+        <div>
+          <h2>Probability Lattice (Distribution)</h2>
+          <canvas id="hist" height="180"></canvas>
+        </div>
+        <div>
+          <h2>Win-Rate Convergence → p</h2>
+          <canvas id="conv" height="180"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <b>This is a probability simulation, not a trading system.</b> A biased Galton board really does
+    shift its bell curve — that math is sound. But real markets are not independent coin-flips with a
+    stable edge, and no "copy this wallet" link gives you free alpha. Use this to understand the law of
+    large numbers, not to make financial decisions.
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const board = $('board'), bctx = board.getContext('2d');
+const hist = $('hist'), hctx = hist.getContext('2d');
+const conv = $('conv'), cctx = conv.getContext('2d');
+
+const ROWS = 8;
+let bias = 0.54;
+let bins = new Array(ROWS + 1).fill(0);
+let dropped = 0, rightLanded = 0;
+let convHistory = []; // cumulative right-fraction over time
+let running = false, ball = null, speed = 12;
+
+function fit(c){ const w = c.parentElement.clientWidth; c.width = w; return w; }
+function resizeAll(){ fit(board); fit(hist); fit(conv); drawBoard(); drawHist(); drawConv(); }
+window.addEventListener('resize', resizeAll);
+
+// --- Galton board geometry ---
+function pegPositions(w, h){
+  const top = 30, bottom = h - 60;
+  const rowGap = (bottom - top) / ROWS;
+  const pegs = [];
+  for (let r = 0; r < ROWS; r++){
+    const y = top + r * rowGap;
+    const count = r + 1;
+    const spread = (count) * 26;
+    const startX = w/2 - spread/2 + 13;
+    const row = [];
+    for (let i = 0; i < count; i++) row.push({ x: startX + i*26, y });
+    pegs.push(row);
+  }
+  return { pegs, top, bottom, rowGap };
+}
+
+function drawBoard(){
+  const w = board.width, h = board.height;
+  bctx.clearRect(0,0,w,h);
+  const { pegs, bottom } = pegPositions(w,h);
+  // pegs
+  bctx.fillStyle = '#cfc8bd';
+  for (const row of pegs) for (const p of row){
+    bctx.beginPath(); bctx.arc(p.x, p.y, 2.2, 0, Math.PI*2); bctx.fill();
+  }
+  // bins floor + counts
+  const slots = ROWS + 1;
+  const slotW = Math.min(46, (w - 40) / slots);
+  const baseX = w/2 - (slots*slotW)/2;
+  const max = Math.max(1, ...bins);
+  for (let i = 0; i < slots; i++){
+    const x = baseX + i*slotW;
+    const barMax = h - bottom - 8;
+    const bh = (bins[i]/max) * barMax;
+    bctx.fillStyle = i <= ROWS/2 ? 'rgba(156,90,60,.55)' : 'rgba(74,114,200,.55)';
+    bctx.fillRect(x+3, h-12-bh, slotW-6, bh);
+    bctx.fillStyle = '#a59f95';
+    bctx.font = '9px monospace';
+    bctx.textAlign = 'center';
+    bctx.fillText(bins[i], x+slotW/2, h-3);
+  }
+  // active ball
+  if (ball){
+    bctx.fillStyle = '#2b2b2b';
+    bctx.beginPath(); bctx.arc(ball.px, ball.py, 4, 0, Math.PI*2); bctx.fill();
+  }
+}
+
+function drawHist(){
+  const w = hist.width, h = hist.height;
+  hctx.clearRect(0,0,w,h);
+  const slots = ROWS+1, max = Math.max(1, ...bins);
+  const bw = w / slots;
+  for (let i=0;i<slots;i++){
+    const bh = (bins[i]/max)*(h-24);
+    hctx.fillStyle = i <= ROWS/2 ? '#9c5a3c' : '#4a72c8';
+    hctx.fillRect(i*bw+4, h-18-bh, bw-8, bh);
+    hctx.fillStyle='#a59f95'; hctx.font='9px monospace'; hctx.textAlign='center';
+    hctx.fillText(i, i*bw+bw/2, h-5);
+  }
+}
+
+function drawConv(){
+  const w = conv.width, h = conv.height, pad = 22;
+  cctx.clearRect(0,0,w,h);
+  // target line = bias
+  const yFor = v => h-pad - (v-0.40)/(0.60-0.40)*(h-2*pad);
+  cctx.strokeStyle='#d8d2c8'; cctx.setLineDash([4,4]);
+  cctx.beginPath(); cctx.moveTo(0,yFor(bias)); cctx.lineTo(w,yFor(bias)); cctx.stroke();
+  cctx.setLineDash([]);
+  cctx.fillStyle='#a59f95'; cctx.font='9px monospace'; cctx.textAlign='left';
+  cctx.fillText('p='+bias.toFixed(3), 4, yFor(bias)-4);
+  // convergence line
+  if (convHistory.length > 1){
+    cctx.strokeStyle='#3a5fb0'; cctx.lineWidth=1.5; cctx.beginPath();
+    convHistory.forEach((v,i)=>{
+      const x = (i/(convHistory.length-1))*w;
+      const y = Math.max(pad, Math.min(h-pad, yFor(v)));
+      i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+    });
+    cctx.stroke();
+    const last = convHistory[convHistory.length-1];
+    cctx.fillStyle='#3a5fb0';
+    cctx.fillText((last*100).toFixed(1)+'%', w-44, yFor(last)-4);
+  }
+}
+
+function dropBall(){
+  // simulate path; ball goes right with prob bias at each peg
+  let rights = 0;
+  const path = [];
+  for (let r=0;r<ROWS;r++){ const go = Math.random()<bias; if(go) rights++; path.push(go); }
+  return { rights, path };
+}
+
+function animateBall(result, done){
+  const w=board.width,h=board.height;
+  const {pegs, bottom} = pegPositions(w,h);
+  let r=0, col=0;
+  ball = { px:w/2, py:10 };
+  function step(){
+    if (r<ROWS){
+      const peg = pegs[r][col];
+      ball.px += (peg.x-ball.px)*0.5;
+      ball.py += (peg.y-ball.py)*0.5;
+      if (Math.abs(ball.py-peg.y)<1.5){
+        if (result.path[r]) col++; // go right
+        r++;
+      }
+    } else {
+      const slots=ROWS+1, slotW=Math.min(46,(w-40)/slots), baseX=w/2-(slots*slotW)/2;
+      const tx = baseX + result.rights*slotW + slotW/2;
+      ball.px += (tx-ball.px)*0.4; ball.py += 6;
+      if (ball.py > h-16){ done(); return; }
+    }
+    drawBoard();
+    requestAnimationFrame(step);
+  }
+  step();
+}
+
+function record(result){
+  bins[result.rights]++;
+  dropped++; rightLanded += result.rights;
+  // win-rate = fraction of individual peg-decisions that went right (converges to p)
+  const fracRight = rightLanded / (dropped*ROWS);
+  convHistory.push(fracRight);
+  if (convHistory.length>400) convHistory.shift();
+  updateStats(fracRight);
+}
+
+function updateStats(fracRight){
+  $('dropped').textContent = dropped;
+  $('green').textContent = (fracRight*100).toFixed(1)+'%';
+  $('pegp').textContent = bias.toFixed(3);
+  $('expected').textContent = (bias*100).toFixed(1)+'%';
+  const meanBin = dropped? (rightLanded/dropped).toFixed(2):'—';
+  $('meanbin').textContent = meanBin + ' / ' + ROWS;
+}
+
+function loop(){
+  if(!running) return;
+  const batch = Math.max(1, Math.floor(speed/6));
+  if (speed > 18){
+    // fast mode: skip animation, simulate in batches
+    for(let i=0;i<speed;i++) record(dropBall());
+    drawBoard(); drawHist(); drawConv();
+    setTimeout(loop, 16);
+  } else {
+    const res = dropBall();
+    animateBall(res, ()=>{ record(res); ball=null; drawHist(); drawConv();
+      setTimeout(loop, 200 - speed*4); });
+  }
+}
+
+$('bias').addEventListener('input', e=>{ bias=parseFloat(e.target.value); $('biaslabel').textContent=bias.toFixed(3); updateStats(rightLanded/Math.max(1,dropped*ROWS)); drawConv(); });
+$('speed').addEventListener('input', e=> speed=parseInt(e.target.value));
+$('run').addEventListener('click', e=>{ running=!running; e.target.textContent=running?'PAUSE':'RUN'; $('status').textContent=running?'● RUNNING':'● PAUSED'; if(running) loop(); });
+$('reset').addEventListener('click', ()=>{ running=false; $('run').textContent='RUN'; $('status').textContent='● IDLE'; bins=new Array(ROWS+1).fill(0); dropped=0; rightLanded=0; convHistory=[]; ball=null; updateStats(0); drawBoard(); drawHist(); drawConv(); });
+
+resizeAll(); updateStats(0);
+</script>
+</body>
+</html>
